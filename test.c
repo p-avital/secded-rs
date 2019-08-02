@@ -1,14 +1,16 @@
 #include "secded.h"
 #include <stdio.h>
+#include <string.h>
 
 int main(int argc, char const *argv[])
 {
     uint8_t expected[8] = {0,0,0,0,0,0,0,5};
     uint8_t buffer[8];
-    struct SECDED* secded = SECDED_new(57);
-    SECDED_encode(secded, expected, 8, buffer);
+    memcpy(buffer, expected, 8);
+    SECDED secded = SECDED_new(57);
+    SECDED_encode(&secded, buffer, 8);
     buffer[7] ^= 1<<1;
-    if (!SECDED_decode(secded, buffer, 8, buffer)) {
+    if (!SECDED_decode(&secded, buffer, 8)) {
         printf("PANIC: DECODE FAILED\n");
         return 1;
     }
@@ -19,6 +21,5 @@ int main(int argc, char const *argv[])
         }
         printf("[%d]: %d == %d\n", i, expected[i], buffer[i]);
     }
-    SECDED_free(secded);
     return 0;
 }

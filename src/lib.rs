@@ -196,8 +196,8 @@ impl SecDedCodec for SECDED_128 {
 pub struct SECDED_64 {
     encodable_size: u8,
     m: u8,
+    mask: u8,
     encode_matrix: [u64; 7],
-    decode_matrix: [u64; 7],
     syndromes: [u16; 64],
 }
 
@@ -228,17 +228,16 @@ impl SECDED_64 {
                 encode_matrix[k] |= i >> (m - 1 - k) & 1;
             }
         }
-        let mut decode_matrix = [0; 7];
         for i in 0..7 {
-            decode_matrix[i] = encode_matrix[i] << (m + 1);
+            encode_matrix[i] = encode_matrix[i] << (m + 1);
             if i <= m {
-                decode_matrix[i] |= 1 << (m - i);
+                encode_matrix[i] |= 1 << (m - i);
             }
         }
         let mut syndromes = [0; 64];
         for error_bit in 0..(encodable_size + m) {
             let error: u64 = 1u64 << error_bit;
-            syndromes[error_bit] = Self::bin_matrix_product_paritied(&decode_matrix[0..m], error) as u16;
+            syndromes[error_bit] = Self::bin_matrix_product_paritied(&encode_matrix[0..m], error) as u16;
         }
         for (i, x) in syndromes[..(encodable_size + m)].iter().enumerate() {
             for y in syndromes[i+1..(encodable_size + m)].iter() {
@@ -248,8 +247,8 @@ impl SECDED_64 {
         SECDED_64 {
             encodable_size: encodable_size as u8,
             m: m as u8,
+            mask: {0xffu8 ^ (0..(m+1)).map(|x| 1u8 << x).sum::<u8>()},
             encode_matrix,
-            decode_matrix,
             syndromes,
         }
     }
@@ -261,37 +260,34 @@ impl SecDedCodec for SECDED_64 {
 
     fn encode(&self, data: &mut [u8]) {
         let mut buffer = [0; 8];
-        let start = 8-data.len();
-        buffer[start..].clone_from_slice(data);
+        buffer[..data.len()].clone_from_slice(data);
+        buffer[7] &= self.mask;
         let mut encodable = byteorder::BigEndian::read_u64(&buffer);
-        // encodable.bin_println(8);
-        if encodable > (1u64 << self.encodable_size) {
-            panic!("{:?} is too big to be encoded on {} bits", buffer.as_ref(), self.encodable_size);
-        }
+        match 1u64.overflowing_shl((self.encodable_size + self.m + 1) as u32) {
+            (value, false) if encodable > value => {
+                panic!("{:?} is too big to be encoded on {} bits", buffer.as_ref(), self.encodable_size);
+            }
+            _ => {}
+        };
         let code = Self::bin_matrix_product_paritied(&self.encode_matrix[..self.m as usize], encodable);
-        encodable = encodable << self.code_size() | code;
-        // encodable.bin_println(8);
+        encodable |= code;
         byteorder::BigEndian::write_u64(&mut buffer, encodable);
-        data.clone_from_slice(&buffer[start..]);
+        data.clone_from_slice(&buffer);
     }
 
     fn decode(&self, data: &mut [u8]) -> Result<(),()> {
         let mut buffer = [0; 8];
-        let start = 8-data.len();
-        buffer[start..].clone_from_slice(data);
+        buffer[..data.len()].clone_from_slice(data);
         let mut decodable = byteorder::BigEndian::read_u64(&buffer);
-        let syndrome = Self::bin_matrix_product_paritied(&self.decode_matrix[..self.m as usize], decodable) as u16;
+        let syndrome = Self::bin_matrix_product_paritied(&self.encode_matrix[..self.m as usize], decodable) as u16;
         if syndrome == 0 {
-            decodable >>= self.code_size();
-            byteorder::BigEndian::write_u64(&mut buffer, decodable);
-            data.clone_from_slice(&buffer[start..]);
             return Ok(());
         }
         for (i, s) in self.syndromes.iter().enumerate() {
             if *s == syndrome {
-                decodable = (decodable ^ (1 << i))>>self.code_size();
+                decodable ^= 1 << i;
                 byteorder::BigEndian::write_u64(&mut buffer, decodable);
-                data.clone_from_slice(&buffer[start..]);
+                data.clone_from_slice(&buffer);
                 return Ok(())
             }
         }
@@ -352,12 +348,12 @@ fn hamming_size() {
 fn hamming_both() {
     let hamming = SECDED::new(57);
     assert_eq!(hamming.code_size(), 7);
-    let test_value = [0,0,0,0,0,0,0,5];
+    let test_value = [0,0,0,0,5,0,0,0];
     let mut buffer = test_value;
     hamming.encode(&mut buffer);
-    buffer[2] = 1;
-    hamming.decode(&mut buffer).unwrap();
-    assert_eq!(test_value, buffer)
+    buffer[2] ^= 1;
+    hamming.decode(dbg!(&mut buffer)).unwrap();
+    assert_eq!(&test_value[..7], dbg!(&buffer[..7]))
 }
 
 #[cfg(feature = "ffi")]
@@ -405,19 +401,19 @@ mod ffi {
     fn ffi_hamming_both() {
         unsafe {
             let secded = SECDED_64_new(57);
-            let expected = [0,0,0,0,0,0,5];
+            let expected = [0,0,0,0,5,0,0];
             let mut buffer = [0u8; 8];
-            buffer[1..].clone_from_slice(&expected);
+            buffer[..7].clone_from_slice(&expected);
             SECDED_64_encode(&secded, buffer.as_mut_ptr(), 8);
             assert!(SECDED_64_decode(&secded, buffer.as_mut_ptr(), 8));
-            assert_eq!(expected, buffer[1..]);
+            assert_eq!(expected, buffer[..7]);
         }
     }
 }
 #[bench]
 fn secded_64_encode_bench(b: &mut test::Bencher) {
     let secded = SECDED_64::new(57);
-    let expected = [0,0,0,0,0,0,5];
+    let expected = [0,0,0,0,5,0,0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
     b.iter(||{
@@ -431,7 +427,7 @@ fn secded_64_encode_bench(b: &mut test::Bencher) {
 #[bench]
 fn secded_128_encode_bench(b: &mut test::Bencher) {
     let secded = SECDED_128::new(57);
-    let expected = [0,0,0,0,0,0,5];
+    let expected = [0,0,0,0,5,0,0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
     b.iter(||{
@@ -445,7 +441,7 @@ fn secded_128_encode_bench(b: &mut test::Bencher) {
 #[bench]
 fn secded_64_decode_bench(b: &mut test::Bencher) {
     let secded = SECDED_64::new(57);
-    let expected = [0,0,0,0,0,0,5];
+    let expected = [0,0,0,0,5,0,0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
     secded.encode(&mut buffer);
@@ -457,7 +453,7 @@ fn secded_64_decode_bench(b: &mut test::Bencher) {
 #[bench]
 fn secded_128_decode_bench(b: &mut test::Bencher) {
     let secded = SECDED_128::new(57);
-    let expected = [0,0,0,0,0,0,5];
+    let expected = [0,0,0,0,5,0,0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
     secded.encode(&mut buffer);
@@ -469,7 +465,7 @@ fn secded_128_decode_bench(b: &mut test::Bencher) {
 #[bench]
 fn secded_64_decode_1err_bench(b: &mut test::Bencher) {
     let secded = SECDED_64::new(57);
-    let expected = [0,0,0,0,0,0,5];
+    let expected = [0,0,0,0,5,0,0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
     secded.encode(&mut buffer);
@@ -492,7 +488,7 @@ fn secded_64_decode_1err_bench(b: &mut test::Bencher) {
 #[bench]
 fn secded_128_decode_1err_bench(b: &mut test::Bencher) {
     let secded = SECDED_128::new(57);
-    let expected = [0,0,0,0,0,0,5];
+    let expected = [0,0,0,0,5,0,0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
     secded.encode(&mut buffer);

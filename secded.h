@@ -14,9 +14,9 @@ typedef struct SECDED_128 {
 
 SECDED_128 SECDED_128_new(size_t encodable_bits);
 
-void SECDED_128_encode(SECDED_128 *secded, uint8_t *data, size_t size);
+void SECDED_128_encode(SECDED_128 *secded, uint8_t data[16]);
 
-bool SECDED_128_decode(SECDED_128 *secded, uint8_t *data, size_t size);
+bool SECDED_128_decode(SECDED_128 *secded, uint8_t data[16]);
 
 typedef struct SECDED_64 {
     uint8_t encodable_size;
@@ -28,8 +28,8 @@ typedef struct SECDED_64 {
 
 SECDED_64 SECDED_64_new(size_t encodable_bits);
 
-void SECDED_64_encode(SECDED_64 *secded, uint8_t *data, size_t size);
+void SECDED_64_encode(SECDED_64 *secded, uint8_t data[8]);
 
-bool SECDED_64_decode(SECDED_64 *secded, uint8_t *data, size_t size);
+bool SECDED_64_decode(SECDED_64 *secded, uint8_t data[8]);
 
 #endif

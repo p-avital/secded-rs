@@ -1,9 +1,56 @@
 use crate::bitwise::Bitwise;
-use std::cmp::max;
 use std::collections::VecDeque;
-
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Bitvec(pub VecDeque<u8>);
+
+#[macro_export]
+macro_rules! bitvec {
+    [$($e:expr), *] => {
+        Bitvec({
+            #[allow(unused_mut)]
+            let mut v = VecDeque::new();
+            $(
+                v.push_back($e);
+            )*
+            v
+        })
+    };
+    ($($e:expr), *) => {bitvec![$($e)*]};
+}
+
+impl From<&[u8]> for Bitvec {
+    fn from(data: &[u8]) -> Self {
+        use std::iter::FromIterator;
+        Bitvec(VecDeque::from_iter(
+            data[data
+                .iter()
+                .position(|x| *x != 0)
+                .unwrap_or_else(|| data.len())..]
+                .iter()
+                .copied(),
+        ))
+    }
+}
+
+#[test]
+fn from() {
+    let b: Bitvec = [1, 2, 3].as_ref().into();
+    assert_eq!(bitvec![1, 2, 3], b);
+}
+
+impl Bitvec {
+    pub fn nth_bit_from_right(&self, n: usize) -> u8 {
+        let (mut byte_shift, bit_shift) = (n / 8, (n % 8) as u32);
+        let mut iter= self.0.iter();
+        while let Some(byte) = iter.next_back() {
+            if byte_shift == 0 {
+                return 1 & (*byte >> bit_shift);
+            }
+            byte_shift -= 1
+        }
+        panic!("Requested {}th bit from the right of a {} bytes long Bitvec", n, self.0.len())
+    }
+}
 
 impl Bitwise for Bitvec {
     type Output = usize;
@@ -17,6 +64,20 @@ impl Bitwise for Bitvec {
     }
 }
 
+impl std::fmt::Binary for Bitvec {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        for byte in self.0.iter() {
+            write!(f, "{:08b}", byte)?
+        }
+        Ok(())
+    }
+}
+impl std::fmt::Debug for Bitvec {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Bitvec({:b})", self)
+    }
+}
+
 impl std::cmp::PartialEq for Bitvec {
     fn eq(&self, other: &Self) -> bool {
         let (longest, shortest) = if self.0.len() > other.0.len() {
@@ -24,8 +85,8 @@ impl std::cmp::PartialEq for Bitvec {
         } else {
             (&other.0, &self.0)
         };
-        let (mut longest, mut shortest) = (longest.iter().rev(), shortest.iter().rev());
-        for (i, l) in longest.enumerate() {
+        let (longest, mut shortest) = (longest.iter().rev(), shortest.iter().rev());
+        for l in longest {
             if let Some(s) = shortest.next() {
                 if s != l {
                     return false;
@@ -40,6 +101,7 @@ impl std::cmp::PartialEq for Bitvec {
 impl std::cmp::Eq for Bitvec {}
 
 use std::hash::Hasher;
+
 impl std::hash::Hash for Bitvec {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let mut in_zero_padding = true;
@@ -56,27 +118,36 @@ impl std::hash::Hash for Bitvec {
 
 impl std::cmp::PartialOrd for Bitvec {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let (longest, shortest, on_longest_superior) = if self.0.len() > other.0.len() {
-            (&self.0, &other.0, std::cmp::Ordering::Greater)
-        } else {
-            (&other.0, &self.0, std::cmp::Ordering::Less)
-        };
-        for (i, l) in longest.iter().enumerate().rev() {
-            if let Some(s) = shortest.get(i) {
-                if l > s {
-                    return Some(on_longest_superior);
-                } else if l < s {
-                    return Some(match on_longest_superior {
-                        std::cmp::Ordering::Greater => std::cmp::Ordering::Less,
-                        std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
-                        _ => unreachable!(),
-                    });
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Ord for Bitvec {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let mut self_it = self.0.iter();
+        let mut other_it = other.0.iter();
+        if self.0.len() > other.0.len() {
+            for _ in 0..(self.0.len() - other.0.len()) {
+                if *self_it.next().unwrap() != 0 {
+                    return std::cmp::Ordering::Greater;
                 }
-            } else if *l != 0 {
-                return Some(on_longest_superior);
+            }
+        } else if other.0.len() > self.0.len() {
+            for _ in 0..(other.0.len() - self.0.len()) {
+                if *other_it.next().unwrap() != 0 {
+                    return std::cmp::Ordering::Less;
+                }
             }
         }
-        Some(std::cmp::Ordering::Equal)
+        for (s, o) in self_it.zip(other_it) {
+            match s.cmp(o) {
+                std::cmp::Ordering::Equal => {}
+                r => {
+                    return r;
+                }
+            }
+        }
+        std::cmp::Ordering::Equal
     }
 }
 
@@ -89,7 +160,7 @@ impl std::ops::BitXor for &Bitvec {
         } else {
             (&other.0, &self.0)
         };
-        let mut longest = longest.iter().rev();
+        let longest = longest.iter().rev();
         let mut shortest = shortest.iter().rev();
         let iter = longest.map(|l| {
             if let Some(s) = shortest.next() {
@@ -120,35 +191,31 @@ impl std::ops::AddAssign<&Self> for Bitvec {
         while self.0.len() < rhs.0.len() {
             self.0.push_front(0);
         }
-        let mut remainder = 0;
-        let mut i = self.0.len();
-        let mut j = rhs.0.len() as isize;
-        while i > 0 {
-            i -= 1;
-            j -= 1;
-            remainder += self.0[i];
-            if j >= 0 {
-                remainder += rhs.0[j as usize];
+        let mut remainder = 0u16;
+        let mut r = rhs.0.iter();
+        for s in self.0.iter_mut().rev() {
+            remainder += *s as u16;
+            if let Some(&r) = r.next() {
+                remainder += r as u16;
             }
-            self.0[i] = remainder as u8;
-            remainder = remainder.overflowing_shr(8).0;
+            *s = remainder as u8;
+            remainder >>= 8;
         }
         while remainder > 0 {
             self.0.push_front(remainder as u8);
-            remainder = remainder.overflowing_shr(8).0;
+            remainder >>= 8;
         }
     }
 }
 
 impl std::ops::AddAssign<u32> for Bitvec {
+    #[allow(clippy::cast_lossless)]
     fn add_assign(&mut self, rhs: u32) {
         let mut remainder = rhs;
-        let mut i = self.0.len();
-        while i > 0 {
-            i -= 1;
-            remainder += self.0[i] as u32;
-            self.0[i] = remainder as u8;
-            remainder = remainder.overflowing_shr(8).0;
+        for s in self.0.iter_mut().rev() {
+            remainder += <u32 as From<u8>>::from(*s);
+            *s = remainder as u8;
+            remainder >>= 8;
         }
         while remainder > 0 {
             self.0.push_front(remainder as u8);
@@ -167,23 +234,24 @@ impl std::ops::Add for &Bitvec {
     }
 }
 
+#[allow(clippy::suspicious_op_assign_impl)]
 impl std::ops::ShrAssign<usize> for Bitvec {
     fn shr_assign(&mut self, rhs: usize) {
-        let (mut byte_shift, bit_shift) = (rhs / 8, (rhs % 8) as u32);
+        let (byte_shift, bit_shift) = (rhs / 8, (rhs % 8) as u32);
         let bit_lshift = 8 - bit_shift;
         for i in (0..self.0.len()).rev() {
-            if dbg!(bit_shift) == 0 {
+            if bit_shift == 0 {
                 if let Some(&value) = self.0.get(i.overflowing_sub(byte_shift).0) {
-                    self.0[i] = dbg!(value);
+                    self.0[i] = value;
                 } else {
-                    self.0[i] = dbg!(0);
+                    self.0[i] = 0;
                 }
             } else {
                 if let Some(&value) = self.0.get(i.overflowing_sub(byte_shift).0) {
-                    self.0[i] = dbg!(value >> bit_shift);
+                    self.0[i] = value >> bit_shift;
                 }
                 if let Some(&value) = self.0.get(i.overflowing_sub(byte_shift + 1).0) {
-                    self.0[i] |= dbg!(value << bit_lshift);
+                    self.0[i] |= value << bit_lshift;
                 }
             }
         }
@@ -199,31 +267,36 @@ impl std::ops::Shr<usize> for Bitvec {
     }
 }
 
+#[allow(clippy::suspicious_op_assign_impl)]
 impl std::ops::ShlAssign<usize> for Bitvec {
     fn shl_assign(&mut self, rhs: usize) {
-        let (mut byte_shift, bit_shift) = (rhs / 8, (rhs % 8) as u32);
-        let mut extension: VecDeque<u8> = vec![0; byte_shift + if bit_shift > 0 {1} else {0}].into();
-        extension.extend(&self.0);
-        self.0 = extension;
+        let (byte_shift, bit_shift) = (rhs / 8, (rhs % 8) as u32);
+        if self.0.is_empty() {
+            self.0.push_front(0)
+        }
+        if self.0[0].count() > (self.0[0] << bit_shift).count() {
+            self.0.push_front(0)
+        }
+        for _ in 0..byte_shift {
+            self.0.push_front(0);
+        }
         let bit_lshift = 8 - bit_shift;
-        for i in (0..self.0.len()) {
-            dbg!(&self);
-            if dbg!(bit_shift) == 0 {
-                if let Some(&value) = self.0.get(dbg!(i + byte_shift)) {
-                    self.0[i] = dbg!(value);
+        for i in 0..self.0.len() {
+            if bit_shift == 0 {
+                if let Some(&value) = self.0.get(i + byte_shift) {
+                    self.0[i] = value;
                 } else {
-                    self.0[i] = dbg!(0);
+                    self.0[i] = 0;
                 }
             } else {
                 if let Some(&value) = self.0.get(i + byte_shift) {
-                    self.0[i] = dbg!(value << bit_shift);
+                    self.0[i] = value << bit_shift;
                 }
                 if let Some(&value) = self.0.get(i + byte_shift + 1) {
-                    self.0[i] |= dbg!(value >> bit_lshift);
+                    self.0[i] |= value >> bit_lshift;
                 }
             }
         }
-        dbg!(&self);
     }
 }
 
@@ -243,7 +316,7 @@ impl std::ops::BitOrAssign<&Bitvec> for Bitvec {
         }
         let mut rhs = rhs.0.iter().rev();
         for x in self.0.iter_mut().rev() {
-            if let Some(&r) = rhs.next(){
+            if let Some(&r) = rhs.next() {
                 *x |= r;
             }
         }
@@ -260,19 +333,43 @@ impl std::ops::BitOr for &Bitvec {
     }
 }
 
+impl std::ops::BitOrAssign<u8> for Bitvec {
+    fn bitor_assign(&mut self, rhs: u8) {
+        if let Some(s) = self.0.iter_mut().last() {
+            *s |= rhs;
+        }
+    }
+}
+
 impl std::ops::BitAnd for &Bitvec {
     type Output = Bitvec;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        Bitvec(self.0.iter().rev().zip(rhs.0.iter()).map(|(l, r)| l & r).collect())
+        let mut s = self.0.iter();
+        let mut r = rhs.0.iter();
+        if self.0.len() > rhs.0.len() {
+            for _ in 0..(self.0.len() - rhs.0.len()) {
+                s.next();
+            }
+        }
+        if rhs.0.len() > self.0.len() {
+            for _ in 0..(rhs.0.len() - self.0.len()) {
+                r.next();
+            }
+        }
+        Bitvec(s.zip(r).map(|(l, r)| l & r).collect())
     }
 }
 
 impl std::ops::BitAnd<u8> for &Bitvec {
-    type Output = Bitvec;
+    type Output = u8;
 
     fn bitand(self, rhs: u8) -> Self::Output {
-        Bitvec(vec![self.0[self.0.len() - 1] & rhs].into())
+        if let Some(s) = self.0.iter().last() {
+            rhs & s
+        } else {
+            0
+        }
     }
 }
 
@@ -280,7 +377,51 @@ impl std::ops::BitAnd<u8> for &Bitvec {
 fn add() {
     let mut a = Bitvec(vec![0x3, 0x42, 0].into());
     a += 1;
-    assert_eq!(a, Bitvec(vec![0x3, 0x42, 1].into()))
+    assert_eq!(a, Bitvec(vec![0x3, 0x42, 1].into()));
+    a += 1;
+    assert_eq!(a, Bitvec(vec![0x3, 0x42, 2].into()));
+}
+
+#[cfg(feature = "bench")]
+#[bench]
+fn add_bench(b: &mut test::Bencher) {
+    let mut a = bitvec!();
+    b.iter(|| {
+        a += 1;
+    })
+}
+
+#[cfg(feature = "bench")]
+#[bench]
+fn add_usize(b: &mut test::Bencher) {
+    let mut a = 0;
+    b.iter(|| {
+        a += 1;
+    })
+}
+
+#[cfg(feature = "bench")]
+#[bench]
+fn cmp_bench(bench: &mut test::Bencher) {
+    let mut a = bitvec!();
+    let b = bitvec!(5, 0);
+    let mut result = false;
+    bench.iter(|| {
+        a += 1;
+        result = a < b;
+    })
+}
+
+#[cfg(feature = "bench")]
+#[bench]
+fn cmp_usize(bench: &mut test::Bencher) {
+    let mut a = 0;
+    let b = 0x500;
+    let mut result = false;
+    bench.iter(|| {
+        a += 1;
+        result = a < b;
+    })
 }
 
 #[test]
@@ -299,7 +440,10 @@ fn shl() {
     b <<= 8;
     a <<= 4;
     assert_eq!(b, Bitvec(vec![3, 0x42, 0, 0].into()));
-//    assert_eq!(a, Bitvec(vec![0x34, 0x20, 0].into()));
+    assert_eq!(a, bitvec![0x34, 0x20, 0]);
+    let mut edge = bitvec!(0x80);
+    edge <<= 1;
+    assert_eq!(edge, bitvec!(1, 0))
 }
 
 #[test]
@@ -315,6 +459,7 @@ fn eq() {
 fn cmp() {
     assert!(Bitvec(vec![3, 2, 0].into()) < Bitvec(vec![4, 3, 2, 0].into()));
     assert!(Bitvec(vec![3, 2, 0].into()) < Bitvec(vec![3, 2, 1].into()));
+    assert!(Bitvec(vec![0, 3].into()) < Bitvec(vec![5].into()));
 }
 
 #[test]

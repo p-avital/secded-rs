@@ -7,8 +7,8 @@
 typedef struct SECDED_128 {
     uint8_t encodable_size;
     uint8_t code_size;
-    __uint128_t encode_matrix[8];
-    __uint128_t decode_matrix[8];
+    uint64_t encode_matrix[14];
+    uint64_t decode_matrix[14];
     uint16_t syndromes[128];
 } SECDED_128;
 
@@ -32,4 +32,16 @@ void SECDED_64_encode(SECDED_64 *secded, uint8_t data[8]);
 
 bool SECDED_64_decode(SECDED_64 *secded, uint8_t data[8]);
 
+#ifdef SECDED_FEATURES_DYN
+typedef struct SECDED_DYN {} SECDED_DYN;
+
+SECDED_DYN *SECDED_DYN_new(size_t encodable_bits);
+
+SECDED_DYN SECDED_DYN_free(SECDED_DYN *secded);
+
+void SECDED_DYN_encode(SECDED_DYN *secded, uint8_t *data, size_t size);
+
+bool SECDED_DYN_decode(SECDED_DYN *secded, uint8_t *data, size_t size);
+
+#endif
 #endif

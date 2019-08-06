@@ -1,15 +1,15 @@
 use crate::bitwise::Bitwise;
 use crate::*;
 #[repr(C)]
-pub struct SECDED_128 {
+pub struct Secded128 {
     encodable_size: u8,
     m: u8,
     mask: u8,
-    encode_matrix: [u128; 8],
+    encode_matrix: [u128; 7],
     syndromes: [u16; 128],
 }
 
-impl SECDED_128 {
+impl Secded128 {
     #[inline]
     fn bin_matrix_product_paritied(matrix: &[u128], value: u128) -> u128 {
         let mut result = 0;
@@ -29,7 +29,7 @@ impl SECDED_128 {
         while 2_usize.pow(m as u32) - m < encodable_size as usize {
             m += 1;
         }
-        let mut encode_matrix = [0; 8];
+        let mut encode_matrix = [0; 7];
         for i in 1..(2_u128.pow(m as u32) + 1) {
             if i.count() < 2 {
                 continue;
@@ -39,7 +39,7 @@ impl SECDED_128 {
                 encode_matrix[k] |= i >> (m - 1 - k) & 1;
             }
         }
-        for i in 0..8 {
+        for i in 0..7 {
             encode_matrix[i] = encode_matrix[i] << (m + 1);
             if i <= m {
                 encode_matrix[i] |= 1 << (m - i);
@@ -56,17 +56,17 @@ impl SECDED_128 {
                 assert_ne!(x, y);
             }
         }
-        SECDED_128 {
+        Secded128 {
             encodable_size: encodable_size as u8,
             m: m as u8,
-            mask: { 0xffu8 ^ (0..(m + 1)).map(|x| 1u8 << x).sum::<u8>() },
+            mask: { 0xffu8 ^ (0..=m).map(|x| 1u8 << x).sum::<u8>() },
             encode_matrix,
             syndromes,
         }
     }
 }
 
-impl SecDedCodec<16> for SECDED_128 {
+impl SecDedCodec for Secded128 {
     fn encodable_size(&self) -> usize {
         self.encodable_size as usize
     }
@@ -74,7 +74,7 @@ impl SecDedCodec<16> for SECDED_128 {
         (self.m + 1) as usize
     }
 
-    fn encode(&self, buffer: &mut [u8; 16]) {
+    fn encode(&self, buffer: &mut [u8]) {
         let mut encodable = byteorder::BigEndian::read_u128(&buffer[..]);
         match 1u128.overflowing_shl((self.encodable_size + self.m + 1) as u32) {
             (value, false) if encodable > value => {
@@ -92,7 +92,7 @@ impl SecDedCodec<16> for SECDED_128 {
         byteorder::BigEndian::write_u128(&mut buffer[..], encodable);
     }
 
-    fn decode(&self, buffer: &mut [u8; 16]) -> Result<(), ()> {
+    fn decode(&self, buffer: &mut [u8]) -> Result<(), ()> {
         let mut decodable = byteorder::BigEndian::read_u128(&buffer[..]);
         let syndrome =
             Self::bin_matrix_product_paritied(&self.encode_matrix[..self.m as usize], decodable)
@@ -109,4 +109,69 @@ impl SecDedCodec<16> for SECDED_128 {
         }
         Err(())
     }
+}
+
+#[cfg(feature = "bench")]
+#[bench]
+fn encode_bench(b: &mut test::Bencher) {
+    let secded = Secded128::new(57);
+    let mut buffer = [0u8; 16];
+    buffer[13] = 5;
+    b.iter(|| {
+        if buffer[0] > 0 {
+            buffer[0] = 0;
+            buffer[15] = 0;
+        }
+        secded.encode(&mut buffer);
+    })
+}
+
+#[cfg(feature = "bench")]
+#[bench]
+fn decode_bench(b: &mut test::Bencher) {
+    let secded = Secded128::new(57);
+    let mut buffer = [0u8; 16];
+    buffer[13] = 5;
+    secded.encode(&mut buffer);
+    b.iter(|| {
+        let mut local_buffer = buffer;
+        secded.decode(&mut local_buffer).unwrap();
+    })
+}
+
+#[cfg(feature = "bench")]
+#[bench]
+fn decode_1err_bench(b: &mut test::Bencher) {
+    let secded = Secded128::new(57);
+    let mut buffer = [0u8; 16];
+    buffer[13] = 5;
+    secded.encode(&mut buffer);
+    let mut i = 15;
+    let mut j = 0;
+    b.iter(|| {
+        let mut local_buffer = buffer;
+        j += 1;
+        if j > 7 {
+            j = 0;
+            i -= 1;
+            if i < 9 {
+                i = 15;
+            }
+        }
+        local_buffer[i] ^= 1 << j;
+        secded.decode(&mut local_buffer).unwrap();
+    })
+}
+
+#[test]
+fn codec() {
+    let hamming = Secded128::new(120);
+    //    assert_eq!(hamming.code_size(), 7);
+    let mut test_value = [0; 16];
+    test_value[12] = 5;
+    let mut buffer = test_value;
+    hamming.encode(&mut buffer);
+    buffer[2] ^= 1;
+    hamming.decode(&mut buffer).unwrap();
+    assert_eq!(&test_value[..15], &buffer[..15])
 }

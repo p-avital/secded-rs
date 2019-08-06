@@ -1,7 +1,15 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
 PROJECT(secded)
-EXECUTE_PROCESS(COMMAND crago build --release)
+
+OPTION(USE_DYN "Enable Dynamic SECDED (only useful to encode bigger than 120bits payloads)" OFF)
+
+IF(USE_DYN)
+    ADD_COMPILE_DEFINITIONS(SECDED_FEATURES_DYN)
+    EXECUTE_PROCESS(COMMAND cargo +stable build --features "all")
+ELSE()
+    EXECUTE_PROCESS(COMMAND cargo +stable build --features "ffi")
+ENDIF()
 ADD_EXECUTABLE(test test.c)
-TARGET_LINK_DIRECTORIES(test PRIVATE target/release)
+TARGET_LINK_DIRECTORIES(test PRIVATE target/debug)
 TARGET_LINK_LIBRARIES(test PRIVATE libsecded.a)
 TARGET_LINK_LIBRARIES(test PUBLIC  pthread dl)

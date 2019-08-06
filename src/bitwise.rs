@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 pub trait Bitwise {
     type Output;
     fn count(&self) -> Self::Output;
@@ -94,25 +92,8 @@ where
     }
 }
 
-impl<I, const n: usize> Bitwise for [I; n]
-where
-    I: Bitwise,
-    <I as Bitwise>::Output: Into<usize>,
-{
-    type Output = usize;
-    fn count(&self) -> usize {
-        self.iter().fold(0, |val, el| {
-            val + <<I as Bitwise>::Output as Into<usize>>::into(el.count())
-        })
-    }
-    fn parity(&self) -> usize {
-        self.iter().fold(0, |val, el| {
-            val ^ <<I as Bitwise>::Output as Into<usize>>::into(el.parity())
-        })
-    }
-}
-
-impl<I> Bitwise for VecDeque<I>
+#[cfg(feature="dyn")]
+impl<I> Bitwise for std::collections::VecDeque<I>
 where
     I: Bitwise,
     <I as Bitwise>::Output: Into<usize>,
@@ -148,6 +129,7 @@ fn test_parity() {
     assert_eq!([2u8, 2, 8].parity(), 1);
 }
 
+#[cfg(feature = "nightly")]
 #[bench]
 fn parity_u64(b: &mut test::Bencher) {
     let mut guard = 1;
@@ -158,6 +140,8 @@ fn parity_u64(b: &mut test::Bencher) {
         }
     });
 }
+
+#[cfg(feature = "nightly")]
 #[bench]
 fn parity_u8_8(b: &mut test::Bencher) {
     let mut guard = 1;

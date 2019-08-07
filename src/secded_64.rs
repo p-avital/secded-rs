@@ -106,7 +106,18 @@ impl SecDedCodec for SecDed64 {
     fn code_size(&self) -> usize {
         (self.m + 1) as usize
     }
+    fn expected_slice_size(&self) -> Option<usize> {
+        Some(8)
+    }
 
+    /// Encodes the data IN-PLACE
+    /// # Arguments:
+    /// * `data`: The slice of data to encode. The last `secded.code_size()` bits MUST be set to 0.
+    /// # Panics:
+    /// Panics if `data.len() != 8`
+    ///
+    /// Unless you use the `no-panics` feature, encoding will also panic if the data you try to encode has some
+    /// bits set to 1 in the reserved space, or past the `encodable_size() + code_size()` rightmost bits
     fn encode(&self, buffer: &mut [u8]) {
         let mut encodable = byteorder::BigEndian::read_u64(&buffer[..]);
         self.encode_assertions(encodable);
@@ -116,6 +127,15 @@ impl SecDedCodec for SecDed64 {
         byteorder::BigEndian::write_u64(&mut buffer[..], encodable);
     }
 
+    /// Decodes the data IN-PLACE
+    /// # Arguments:
+    /// * `data`: The slice of data to decode.  
+    /// The last `secded.code_size()` bits will be reset to 0, a single error will be corrected implicitly.
+    /// # Returns:
+    /// `Ok(())` if the data slice's correctness has been checked: 0 error found or 1 found and corrected.
+    /// `Err(())` if 2 errors were detected.
+    /// # Panics:
+    /// Panics if `data.len() != 8`
     fn decode(&self, buffer: &mut [u8]) -> Result<(), ()> {
         let mut decodable = byteorder::BigEndian::read_u64(&buffer);
         let syndrome =

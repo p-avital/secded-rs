@@ -21,8 +21,15 @@ pub mod secded_dynamic;
 pub trait SecDedCodec {
     /// Returns the number of bits that this SecDedCodec can encode.
     fn encodable_size(&self) -> usize;
+
     /// Returns the size of the correction code that will be appended to the data.
     fn code_size(&self) -> usize;
+
+    /// Returns `Some(size)` if the implementation would panic if `data.len() != size`
+    fn expected_slice_size(&self) -> Option<usize> {
+        None
+    }
+
     /// Encodes the data IN-PLACE
     /// # Arguments:
     /// * `data`: The slice of data to encode. The last `secded.code_size()` bits MUST be set to 0.
@@ -30,6 +37,7 @@ pub trait SecDedCodec {
     /// Depending on the implementation, panics may occur if the size of the slice isn't adapted to the Codec:
     /// * SecDed64 panics if `data.len() != 8`  
     /// * SecDed128 panics if `data.len() != 16`  
+    /// * You can use `secded.expected_slice_size()` to find out if a specific size is required for the slice.
     ///
     /// Unless you use the `no-panics` feature, encoding will also panic if the data you try to encode has some
     /// bits set to 1 in the reserved space, or past the `encodable_size() + code_size()` rightmost bits
@@ -46,6 +54,7 @@ pub trait SecDedCodec {
     /// Depending on the implementation, panics may occur if the size of the slice isn't adapted to the Codec:
     /// * SecDed64 panics if `data.len() != 8`
     /// * SecDed128 panics if `data.len() != 16`
+    /// * You can use `secded.expected_slice_size()` to find out if a specific size is required for the slice.
     fn decode(&self, data: &mut [u8]) -> Result<(), ()>;
 }
 

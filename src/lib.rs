@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "bench" , feature(test))]
+#![cfg_attr(feature = "bench", feature(test))]
 extern crate byteorder;
 #[cfg(feature = "bench")]
 extern crate test;
@@ -10,9 +10,9 @@ mod bitwise;
 pub mod secded_64;
 pub use secded_64::Secded64;
 pub mod secded_128;
-pub use secded_128::Secded128;
 #[cfg(feature = "dyn")]
 use crate::secded_dynamic::SecdedDynamic;
+pub use secded_128::Secded128;
 
 #[cfg(feature = "dyn")]
 pub mod secded_dynamic;

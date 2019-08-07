@@ -92,7 +92,7 @@ where
     }
 }
 
-#[cfg(feature="dyn")]
+#[cfg(feature = "dyn")]
 impl<I> Bitwise for std::collections::VecDeque<I>
 where
     I: Bitwise,

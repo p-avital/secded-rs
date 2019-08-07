@@ -64,12 +64,11 @@ int test_dyn()
         printf("TESTING DYN -- FAILED: DECODE FAILED\n");
         return 4;
     }
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 8; i++) {
         if (expected[i] != buffer[i]) {
             printf("TESTING DYN -- FAILED: DECODE WRONG: [%d]: %d != %d\n", i, expected[i], buffer[i]);
             result = 4;
         }
-        printf("[%d]: %d == %d\n", i, expected[i], buffer[i]);
     }
     SECDED_DYN_free(secded);
     printf("TESTING DYN -- OK\r\n");

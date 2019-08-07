@@ -1,22 +1,31 @@
 [package]
-name = "hamming"
+name = "secded"
 version = "0.1.0"
 authors = ["Pierre Avital <pierre.avital@me.com>"]
 edition = "2018"
+keywords = ["secded", "hamming", "error-correction", "network"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 byteorder = {version = "1.3.2", default-features = false, features = ["i128"]}
+lazy_static = "1.3.0"
+
+[dev-dependencies]
+rand = "0.7.0"
 
 [features]
+no-panics = []          # Disables mmost checks that would result in a panic.
+                        # You should only enable this after testing your application.
+
+ffi = []                # Enables the FFI links
+
+dyn = []                # Enables SecdedDynamic, requires std
+
+bench = ["no-panics"]   # Enables [bench] functions, disables panics because the benches are
+                        # known to never panic, requires nightly
+
 default = []
-ffi = []
-dyn = []
-bench = [] # Requires nightly
-all = ["ffi", "dyn"]
-nightly = ["bench"]
-all-nightly = ["all", "nightly"]
 
 [lib]
 name = "secded"

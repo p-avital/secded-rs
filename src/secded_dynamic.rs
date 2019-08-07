@@ -8,23 +8,27 @@ pub struct SecdedDynamic {
     encodable_size: usize,
     m: usize,
     max: Bitvec,
+    mask: Bitvec,
     encode_matrix: Vec<Bitvec>,
     syndromes: HashMap<Bitvec, Bitvec>,
+}
+lazy_static::lazy_static! {
+    static ref BITVEC_ONE: Bitvec = bitvec![1];
 }
 
 impl SecdedDynamic {
     #[inline]
     fn bin_matrix_product_paritied(matrix: &[Bitvec], value: &Bitvec) -> Bitvec {
-        let one = Bitvec(vec![1].into());
+        let one: &Bitvec = &BITVEC_ONE;
         let mut result = bitvec![];
         for x in matrix.iter() {
             if (x & value).parity() != 0 {
-                result |= &one;
+                result |= one;
             }
             result <<= 1;
         }
         if result.parity() != 0 {
-            result |= &one;
+            result |= one;
         }
         result
     }
@@ -58,7 +62,7 @@ impl SecdedDynamic {
         let mut syndromes = HashMap::new();
         let mut error = Bitvec(vec![1].into());
         while error < max {
-            let syndrome = Self::bin_matrix_product_paritied(&encode_matrix, &error);
+            let syndrome = Self::bin_matrix_product_paritied(encode_matrix.as_ref(), &error);
             if let Some(other) = syndromes.insert(syndrome, error.clone()) {
                 let mut syndrome = None;
                 for (syn, err) in syndromes.iter() {
@@ -76,13 +80,52 @@ impl SecdedDynamic {
             }
             error <<= 1;
         }
+        let mut mask = bitvec!();
+        for _ in 0..m {
+            mask <<= 1;
+            mask |= 1;
+        }
         SecdedDynamic {
             m,
             max,
+            mask,
             encodable_size,
             encode_matrix,
             syndromes,
         }
+    }
+
+    #[cfg(feature = "no-panics")]
+    #[inline]
+    fn encode_assertions(&self, _buffer: &Bitvec) {}
+
+    #[cfg(not(feature = "no-panics"))]
+    #[inline]
+    fn encode_assertions(&self, encodable: &Bitvec) {
+        if !(encodable & &self.mask).is_null() {
+            panic!(
+                "{:?} overlaps with the code-correction slot, which is the right-most {} bits ",
+                encodable,
+                self.code_size(),
+            );
+        }
+
+        if encodable > &self.max {
+            panic!(
+                "{:?} is too big to be encoded on {} bits",
+                encodable,
+                self.encodable_size + self.code_size()
+            );
+        }
+    }
+}
+
+#[test]
+fn bin_matrix() {
+    let dynamic = SecdedDynamic::new(57);
+    let fixed = Secded64::new(57);
+    for (i, x) in dynamic.encode_matrix.iter().enumerate() {
+        assert_eq!(fixed.encode_matrix[i], x.to_u64_be())
     }
 }
 
@@ -105,33 +148,34 @@ impl SecDedCodec for SecdedDynamic {
         self.m + 1
     }
     fn encode(&self, data: &mut [u8]) {
-        let buffer: Bitvec = data.as_ref().into();
-        if buffer > self.max {
-            panic!(
-                "data: {:?} is too big to encode with {} encodable bits",
-                data.as_ref(),
-                self.encodable_size
-            )
-        }
-        let buffer = Self::bin_matrix_product_paritied(self.encode_matrix.as_ref(), &buffer);
+        let mut buffer: Bitvec = Bitvec({
+            let mut inner = VecDeque::with_capacity(data.len());
+            for &x in data.iter() {
+                inner.push_back(x);
+            }
+            inner
+        });
+        self.encode_assertions(&buffer);
+        buffer |= &Self::bin_matrix_product_paritied(self.encode_matrix.as_ref(), &buffer);
         copy_into(&buffer, data);
     }
     fn decode(&self, data: &mut [u8]) -> Result<(), ()> {
-        let mut buffer: Bitvec = data.as_ref().into();
-        if buffer > self.max {
-            panic!(
-                "data: {:?} is too big to encode with {} encodable bits",
-                data.as_ref(),
-                self.encodable_size
-            )
-        }
+        let mut buffer: Bitvec = Bitvec({
+            let mut inner = VecDeque::with_capacity(data.len());
+            for &x in data.iter() {
+                inner.push_back(x);
+            }
+            inner
+        });
         let syndrome = Self::bin_matrix_product_paritied(self.encode_matrix.as_ref(), &buffer);
-        if syndrome == bitvec![] {
+        if syndrome.is_null() {
+            self.mask.mask_not_buffer(data);
             return Ok(());
         }
         if let Some(correction) = self.syndromes.get(&syndrome) {
             buffer ^= correction;
             copy_into(&buffer, data);
+            self.mask.mask_not_buffer(data);
             Ok(())
         } else {
             Err(())
@@ -142,16 +186,32 @@ impl SecDedCodec for SecdedDynamic {
 #[test]
 fn codec() {
     let secded = SecdedDynamic::new(57);
-    let expected = [0, 0, 0, 0, 0, 5, 0, 0];
-    let mut buffer = expected;
-    secded.encode(&mut buffer);
-    secded.decode(&mut buffer).unwrap();
-    assert_eq!(buffer[..7], expected[..7]);
+    let expected = [0, 0, 0, 0, 5, 0, 0, 0];
+    let mut encode_buffer = expected;
+    secded.encode(&mut encode_buffer);
+    let mut should_panic = false;
+    for i in 0..64 {
+        let mut local_buffer = encode_buffer;
+        local_buffer[i / 8] ^= 1 << (i % 8);
+        match secded.decode(&mut local_buffer) {
+            Ok(()) => {
+                if local_buffer != expected {
+                    eprintln!("{:?} != {:?}", local_buffer, expected);
+                    should_panic = true;
+                }
+            }
+            Err(()) => {
+                eprintln!("{:?} Decode Failed", local_buffer);
+                should_panic = true;
+            }
+        };
+    }
+    assert!(!should_panic)
 }
 
 #[cfg(feature = "bench")]
 #[bench]
-fn encode_bench(b: &mut test::Bencher) {
+fn encode(b: &mut test::Bencher) {
     let secded = SecdedDynamic::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0];
     let mut buffer = [0u8; 8];
@@ -167,7 +227,7 @@ fn encode_bench(b: &mut test::Bencher) {
 
 #[cfg(feature = "bench")]
 #[bench]
-fn decode_bench(b: &mut test::Bencher) {
+fn decode(b: &mut test::Bencher) {
     let secded = SecdedDynamic::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0];
     let mut buffer = [0u8; 8];
@@ -181,7 +241,7 @@ fn decode_bench(b: &mut test::Bencher) {
 
 #[cfg(feature = "bench")]
 #[bench]
-fn decode_1err_bench(b: &mut test::Bencher) {
+fn decode_1err(b: &mut test::Bencher) {
     let secded = SecdedDynamic::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0];
     let mut buffer = [0u8; 8];

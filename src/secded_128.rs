@@ -46,23 +46,56 @@ impl Secded128 {
             }
         }
         let mut syndromes = [0; 128];
-        for error_bit in 0..(encodable_size + m) {
+        for error_bit in 0..=(encodable_size + m) {
             let error: u128 = 1u128 << error_bit;
             syndromes[error_bit] =
                 Self::bin_matrix_product_paritied(&encode_matrix[0..m], error) as u16;
         }
-        for (i, x) in syndromes[..(encodable_size + m)].iter().enumerate() {
-            for y in syndromes[i + 1..(encodable_size + m)].iter() {
+        for (i, x) in syndromes[..=(encodable_size + m)].iter().enumerate() {
+            for y in syndromes[i + 1..=(encodable_size + m)].iter() {
                 assert_ne!(x, y);
             }
         }
         Secded128 {
             encodable_size: encodable_size as u8,
             m: m as u8,
-            mask: { 0xffu8 ^ (0..=m).map(|x| 1u8 << x).sum::<u8>() },
+            mask: { (0..=m).map(|x| 1u8 << x).sum::<u8>() },
             encode_matrix,
             syndromes,
         }
+    }
+
+    #[cfg(feature = "no-panics")]
+    #[inline]
+    fn encode_assertions(&self, _encodable: u128) {}
+
+    #[cfg(not(feature = "no-panics"))]
+    #[inline]
+    fn encode_assertions(&self, encodable: u128) {
+        match encodable & self.mask as u128 {
+            0 => {}
+            _ => {
+                let mut buffer: [u8; 16] = unsafe { std::mem::uninitialized() };
+                byteorder::BigEndian::write_u128(&mut buffer[..], encodable);
+                panic!(
+                    "{:?} overlaps with the code-correction slot, which is the right-most {} bits ",
+                    buffer.as_ref(),
+                    self.code_size(),
+                );
+            }
+        }
+        match 1u128.overflowing_shl((self.encodable_size + self.m + 1) as u32) {
+            (value, false) if encodable > value => {
+                let mut buffer: [u8; 16] = unsafe { std::mem::uninitialized() };
+                byteorder::BigEndian::write_u128(&mut buffer[..], encodable);
+                panic!(
+                    "{:?} is too big to be encoded on {} bits",
+                    buffer.as_ref(),
+                    self.encodable_size as usize + self.code_size()
+                );
+            }
+            _ => {}
+        };
     }
 }
 
@@ -75,17 +108,8 @@ impl SecDedCodec for Secded128 {
     }
 
     fn encode(&self, buffer: &mut [u8]) {
-        let mut encodable = byteorder::BigEndian::read_u128(&buffer[..]);
-        match 1u128.overflowing_shl((self.encodable_size + self.m + 1) as u32) {
-            (value, false) if encodable > value => {
-                panic!(
-                    "{:?} is too big to be encoded on {} bits",
-                    buffer.as_ref(),
-                    self.encodable_size
-                );
-            }
-            _ => {}
-        };
+        let mut encodable = byteorder::BigEndian::read_u128(buffer);
+        self.encode_assertions(encodable);
         let code =
             Self::bin_matrix_product_paritied(&self.encode_matrix[..self.m as usize], encodable);
         encodable |= code;
@@ -93,17 +117,19 @@ impl SecDedCodec for Secded128 {
     }
 
     fn decode(&self, buffer: &mut [u8]) -> Result<(), ()> {
-        let mut decodable = byteorder::BigEndian::read_u128(&buffer[..]);
+        let mut decodable = byteorder::BigEndian::read_u128(buffer);
         let syndrome =
             Self::bin_matrix_product_paritied(&self.encode_matrix[..self.m as usize], decodable)
                 as u16;
         if syndrome == 0 {
+            buffer[15] &= !self.mask;
             return Ok(());
         }
         for (i, s) in self.syndromes.iter().enumerate() {
             if *s == syndrome {
                 decodable ^= 1 << i;
-                byteorder::BigEndian::write_u128(&mut buffer[..], decodable);
+                byteorder::BigEndian::write_u128(buffer, decodable);
+                buffer[15] &= !self.mask;
                 return Ok(());
             }
         }
@@ -113,7 +139,7 @@ impl SecDedCodec for Secded128 {
 
 #[cfg(feature = "bench")]
 #[bench]
-fn encode_bench(b: &mut test::Bencher) {
+fn encode(b: &mut test::Bencher) {
     let secded = Secded128::new(57);
     let mut buffer = [0u8; 16];
     buffer[13] = 5;
@@ -128,7 +154,7 @@ fn encode_bench(b: &mut test::Bencher) {
 
 #[cfg(feature = "bench")]
 #[bench]
-fn decode_bench(b: &mut test::Bencher) {
+fn decode(b: &mut test::Bencher) {
     let secded = Secded128::new(57);
     let mut buffer = [0u8; 16];
     buffer[13] = 5;
@@ -141,7 +167,7 @@ fn decode_bench(b: &mut test::Bencher) {
 
 #[cfg(feature = "bench")]
 #[bench]
-fn decode_1err_bench(b: &mut test::Bencher) {
+fn decode_1err(b: &mut test::Bencher) {
     let secded = Secded128::new(57);
     let mut buffer = [0u8; 16];
     buffer[13] = 5;

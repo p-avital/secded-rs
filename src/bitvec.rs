@@ -38,18 +38,65 @@ fn from() {
     assert_eq!(bitvec![1, 2, 3], b);
 }
 
+//        pub static ref BITVEC_ONE: Bitvec = bitvec!(1);
+
 impl Bitvec {
     pub fn nth_bit_from_right(&self, n: usize) -> u8 {
         let (mut byte_shift, bit_shift) = (n / 8, (n % 8) as u32);
-        let mut iter= self.0.iter();
+        let mut iter = self.0.iter();
         while let Some(byte) = iter.next_back() {
             if byte_shift == 0 {
                 return 1 & (*byte >> bit_shift);
             }
             byte_shift -= 1
         }
-        panic!("Requested {}th bit from the right of a {} bytes long Bitvec", n, self.0.len())
+        panic!(
+            "Requested {}th bit from the right of a {} bytes long Bitvec",
+            n,
+            self.0.len()
+        )
     }
+
+    pub fn mask_not(&mut self, rhs: &Self) {
+        for (s, r) in self.0.iter_mut().rev().zip(rhs.0.iter().rev()) {
+            *s &= !*r;
+        }
+    }
+
+    pub fn mask_not_buffer(&self, rhs: &mut [u8]) {
+        for (s, r) in rhs.iter_mut().rev().zip(self.0.iter().rev()) {
+            *s &= !*r;
+        }
+    }
+
+    pub fn is_null(&self) -> bool {
+        self.0.iter().all(|x| *x == 0)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn to_u64_be(&self) -> u64 {
+        let mut result = 0;
+        for x in self.0.iter() {
+            result = (result << 8) | (*x as u64);
+        }
+        result
+    }
+
+    #[allow(dead_code)]
+    fn from_u64_be(mut val: u64) -> Self {
+        let mut vec = VecDeque::with_capacity(8);
+        while val > 0 {
+            vec.push_front(val as u8);
+            val >>= 8;
+        }
+        Bitvec(vec)
+    }
+}
+#[test]
+fn mask_not() {
+    let mut a = bitvec!(0xff, 0xff);
+    a.mask_not(&bitvec!(0x0f));
+    assert_eq!(a, bitvec!(0xff, 0xf0));
 }
 
 impl Bitwise for Bitvec {
@@ -66,8 +113,12 @@ impl Bitwise for Bitvec {
 
 impl std::fmt::Binary for Bitvec {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        for byte in self.0.iter() {
-            write!(f, "{:08b}", byte)?
+        let mut iter = self.0.iter();
+        if let Some(byte) = iter.next() {
+            write!(f, "{:08b}", byte)?;
+        }
+        for byte in iter {
+            write!(f, "_{:08b}", byte)?
         }
         Ok(())
     }
@@ -113,6 +164,26 @@ impl std::hash::Hash for Bitvec {
                 state.write_u8(x);
             }
         }
+    }
+}
+
+#[test]
+fn hash() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut vec = bitvec!(1);
+    for i in 0..64 {
+        let mut hasher = DefaultHasher::new();
+        vec.hash(&mut hasher);
+        let hash = hasher.finish();
+        let mut vec2 = vec.clone() << 1;
+        for _ in (i + 1)..64 {
+            let mut hasher = DefaultHasher::new();
+            vec2.hash(&mut hasher);
+            assert_ne!(hash, hasher.finish());
+            vec2 <<= 1;
+        }
+        vec <<= 1;
     }
 }
 
@@ -249,6 +320,8 @@ impl std::ops::ShrAssign<usize> for Bitvec {
             } else {
                 if let Some(&value) = self.0.get(i.overflowing_sub(byte_shift).0) {
                     self.0[i] = value >> bit_shift;
+                } else {
+                    self.0[i] = 0;
                 }
                 if let Some(&value) = self.0.get(i.overflowing_sub(byte_shift + 1).0) {
                     self.0[i] |= value << bit_lshift;
@@ -291,6 +364,8 @@ impl std::ops::ShlAssign<usize> for Bitvec {
             } else {
                 if let Some(&value) = self.0.get(i + byte_shift) {
                     self.0[i] = value << bit_shift;
+                } else {
+                    self.0[i] = 0;
                 }
                 if let Some(&value) = self.0.get(i + byte_shift + 1) {
                     self.0[i] |= value >> bit_lshift;
@@ -374,12 +449,63 @@ impl std::ops::BitAnd<u8> for &Bitvec {
 }
 
 #[test]
+fn and_u8() {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for _ in 0..100000 {
+        let (x, y): (u64, u8) = (rng.gen(), rng.gen_range(0, 64));
+        let expected = x as u8 & y;
+        let mut x = Bitvec::from_u64_be(x);
+        let x = &x & y;
+        match expected == x {
+            true => {}
+            false => {
+                dbg!(expected);
+                dbg!(x);
+                panic!()
+            }
+        }
+    }
+}
+
+#[test]
+fn and() {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for _ in 0..100000 {
+        let (x, y): (u64, u64) = (rng.gen(), rng.gen_range(0, 64));
+        let expected = x & y;
+        let mut x = Bitvec::from_u64_be(x);
+        let x = &x & &Bitvec::from_u64_be(y);
+        match expected == x.to_u64_be() {
+            true => {}
+            false => {
+                dbg!(expected);
+                dbg!(x);
+                panic!()
+            }
+        }
+    }
+}
+
+#[test]
 fn add() {
-    let mut a = Bitvec(vec![0x3, 0x42, 0].into());
-    a += 1;
-    assert_eq!(a, Bitvec(vec![0x3, 0x42, 1].into()));
-    a += 1;
-    assert_eq!(a, Bitvec(vec![0x3, 0x42, 2].into()));
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for _ in 0..100000 {
+        let (x, y): (u64, u32) = (rng.gen(), rng.gen_range(0, 64));
+        let expected = x + y as u64;
+        let mut x = Bitvec::from_u64_be(x);
+        x += y;
+        match expected == x.to_u64_be() {
+            true => {}
+            false => {
+                dbg!(Bitvec::from_u64_be(expected));
+                dbg!(x);
+                panic!()
+            }
+        }
+    }
 }
 
 #[cfg(feature = "bench")]
@@ -426,24 +552,41 @@ fn cmp_usize(bench: &mut test::Bencher) {
 
 #[test]
 fn shr() {
-    let mut a = Bitvec(vec![0x3, 0x42, 0].into());
-    let mut b = a.clone();
-    a >>= 4;
-    b >>= 8;
-    assert_eq!(b, Bitvec(vec![3, 0x42].into()));
-    assert_eq!(a, Bitvec(vec![0x34, 0x20].into()));
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for _ in 0..100000 {
+        let (x, y): (u64, usize) = (rng.gen(), rng.gen_range(0, 64));
+        let expected = x >> y;
+        let mut x = Bitvec::from_u64_be(x);
+        x >>= y;
+        match expected == x.to_u64_be() {
+            true => {}
+            false => {
+                dbg!(Bitvec::from_u64_be(expected));
+                dbg!(x);
+                panic!()
+            }
+        }
+    }
 }
 #[test]
 fn shl() {
-    let mut a = Bitvec(vec![0x3, 0x42, 0].into());
-    let mut b = a.clone();
-    b <<= 8;
-    a <<= 4;
-    assert_eq!(b, Bitvec(vec![3, 0x42, 0, 0].into()));
-    assert_eq!(a, bitvec![0x34, 0x20, 0]);
-    let mut edge = bitvec!(0x80);
-    edge <<= 1;
-    assert_eq!(edge, bitvec!(1, 0))
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for _ in 0..100000 {
+        let (x, y): (u64, usize) = (rng.gen(), rng.gen_range(0, 64));
+        let expected = x << y;
+        let mut x = Bitvec::from_u64_be(x);
+        x <<= y;
+        match expected == x.to_u64_be() {
+            true => {}
+            false => {
+                dbg!(Bitvec::from_u64_be(expected));
+                dbg!(x);
+                panic!()
+            }
+        }
+    }
 }
 
 #[test]
@@ -464,18 +607,13 @@ fn cmp() {
 
 #[test]
 fn xor() {
-    let a = Bitvec(vec![3, 2, 0].into());
-    let b = Bitvec(vec![1, 2, 0].into());
-    let mut c = a.clone();
-    let d = Bitvec(vec![2, 0].into());
-    let mut e = d.clone();
-    let mut f = a.clone();
-    c ^= &a;
-    e ^= &a;
-    f ^= &d;
-    assert_eq!(c, Bitvec(vec![].into()));
-    assert_eq!(&a ^ &b, Bitvec(vec![2, 0, 0].into()));
-    assert_eq!(f, Bitvec(vec![3, 0, 0].into()));
-    assert_eq!(&b ^ &d, Bitvec(vec![1, 0, 0].into()));
-    assert_eq!(e, Bitvec(vec![3, 0, 0].into()));
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for _ in 0..100000 {
+        let (x, y): (u64, u64) = rng.gen();
+        let expected = x ^ y;
+        let mut x = Bitvec::from_u64_be(x);
+        x ^= &Bitvec::from_u64_be(y);
+        assert_eq!(expected, x.to_u64_be());
+    }
 }

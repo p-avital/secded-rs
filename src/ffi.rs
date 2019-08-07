@@ -71,20 +71,15 @@ mod dynamic {
     #[no_mangle]
     pub unsafe fn SECDED_DYN_encode(secded: *const SECDED_DYN, data: *mut u8, size: usize) {
         let slice = std::slice::from_raw_parts_mut(data, size);
-        println!("{:?}", slice);
         (*(secded as *const crate::SecdedDynamic)).encode(slice);
     }
 
     #[no_mangle]
     pub unsafe fn SECDED_DYN_decode(secded: *const SECDED_DYN, data: *mut u8, size: usize) -> bool {
         let slice = std::slice::from_raw_parts_mut(data, size);
-        println!("{:?}", slice);
         match (*(secded as *const crate::SecdedDynamic)).decode(slice) {
             Err(()) => false,
-            Ok(()) => {
-                println!("{:?}", slice);
-                true
-            },
+            Ok(()) => true,
         }
     }
 }

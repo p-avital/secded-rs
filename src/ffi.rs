@@ -1,18 +1,18 @@
-use crate::{SecDedCodec, Secded128, Secded64};
+use crate::{SecDed128, SecDed64, SecDedCodec};
 
 // }
 #[no_mangle]
-pub unsafe fn SECDED_64_new(encodable_size: usize) -> Secded64 {
-    crate::Secded64::new(encodable_size)
+pub unsafe fn SECDED_64_new(encodable_size: usize) -> SecDed64 {
+    crate::SecDed64::new(encodable_size)
 }
 
 #[no_mangle]
-pub unsafe fn SECDED_64_encode(secded: *const Secded64, data: *mut [u8; 8]) {
+pub unsafe fn SECDED_64_encode(secded: *const SecDed64, data: *mut [u8; 8]) {
     (*secded).encode(&mut *data);
 }
 
 #[no_mangle]
-pub unsafe fn SECDED_64_decode(secded: *const Secded64, data: *mut [u8; 8]) -> bool {
+pub unsafe fn SECDED_64_decode(secded: *const SecDed64, data: *mut [u8; 8]) -> bool {
     match (*secded).decode(&mut *data) {
         Err(()) => false,
         Ok(()) => true,
@@ -20,17 +20,17 @@ pub unsafe fn SECDED_64_decode(secded: *const Secded64, data: *mut [u8; 8]) -> b
 }
 
 #[no_mangle]
-pub unsafe fn SECDED_128_new(encodable_size: usize) -> Secded128 {
-    crate::Secded128::new(encodable_size)
+pub unsafe fn SECDED_128_new(encodable_size: usize) -> SecDed128 {
+    crate::SecDed128::new(encodable_size)
 }
 
 #[no_mangle]
-pub unsafe fn SECDED_128_encode(secded: *const Secded128, data: *mut [u8; 16]) {
+pub unsafe fn SECDED_128_encode(secded: *const SecDed128, data: *mut [u8; 16]) {
     (*secded).encode(&mut *data);
 }
 
 #[no_mangle]
-pub unsafe fn SECDED_128_decode(secded: *const Secded128, data: *mut [u8; 16]) -> bool {
+pub unsafe fn SECDED_128_decode(secded: *const SecDed128, data: *mut [u8; 16]) -> bool {
     match (*secded).decode(&mut *data) {
         Err(()) => false,
         Ok(()) => true,
@@ -61,23 +61,23 @@ mod dynamic {
 
     #[no_mangle]
     pub unsafe fn SECDED_DYN_new(encodable_size: usize) -> *const SECDED_DYN {
-        Box::into_raw(Box::new(crate::SecdedDynamic::new(encodable_size))) as *const SECDED_DYN
+        Box::into_raw(Box::new(crate::SecDedDynamic::new(encodable_size))) as *const SECDED_DYN
     }
     #[no_mangle]
     pub unsafe fn SECDED_DYN_free(secded: *const SECDED_DYN) {
-        Box::from_raw(secded as *mut crate::SecdedDynamic);
+        Box::from_raw(secded as *mut crate::SecDedDynamic);
     }
 
     #[no_mangle]
     pub unsafe fn SECDED_DYN_encode(secded: *const SECDED_DYN, data: *mut u8, size: usize) {
         let slice = std::slice::from_raw_parts_mut(data, size);
-        (*(secded as *const crate::SecdedDynamic)).encode(slice);
+        (*(secded as *const crate::SecDedDynamic)).encode(slice);
     }
 
     #[no_mangle]
     pub unsafe fn SECDED_DYN_decode(secded: *const SECDED_DYN, data: *mut u8, size: usize) -> bool {
         let slice = std::slice::from_raw_parts_mut(data, size);
-        match (*(secded as *const crate::SecdedDynamic)).decode(slice) {
+        match (*(secded as *const crate::SecDedDynamic)).decode(slice) {
             Err(()) => false,
             Ok(()) => true,
         }

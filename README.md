@@ -6,15 +6,15 @@ Encoding and decoding is always done __"In Place"__: the `Secded::code_size()` l
 ## Implementations
 Implementations provided by this crate are listed from fastest to slowest.
 
-### Secded64
+### SecDed64
 This is the fastest implementation provided by this crate, and the one I recommend using unless you need to encode larger than 57 bits payloads.
 
-### Secded128
+### SecDed128
 Almost as fast as Secded64 on x86_64 machines (the slight performance hit being due to the use of 2 cache lines instead of 1 for the encoding/decoding matrix), I haven't tested it on other architectures. Support for u128 is still a bit iffy at the time of writing.
 
 You should use this if your platform has good support for u128 and you need to encode between 58 and 120 bits.
 
-### SecdedDynamic
+### SecDedDynamic
 It can work with any size of encoding, but is much slower than the other 2 implementations (about 10 times slower when working with the same encoding size). It also requires `libstd` to function.  
 It is hidden behind the `"dyn"` feature flag.
 
@@ -36,7 +36,7 @@ test secded_dynamic::encode      ... bench:         411 ns/iter (+/- 27)
 ```
 
 ## How It Works
-The correction matrix `C` is built by concatenating the column vector (most significant bit at the top) representations of each encodable integer with a bit count higher than one.
+The correction matrix `C` is built by concatenating the column vector (most significant bit at the top) representations of each encodable integer with a bit count higher than one. This way of constructing `C` is deterministic and guarantees cross-implementation compatibility.
 
 Typically, encoding would use `encoded = data * G`, where `data` is a column vector of `N` bits, and `G` is the `N` sized Identity Matrix on top of `C`.
 

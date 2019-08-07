@@ -1,7 +1,7 @@
 use crate::bitwise::Bitwise;
 use crate::*;
 #[repr(C)]
-pub struct Secded64 {
+pub struct SecDed64 {
     encodable_size: u8,
     m: u8,
     mask: u8,
@@ -9,7 +9,7 @@ pub struct Secded64 {
     syndromes: [u16; 64],
 }
 
-impl Secded64 {
+impl SecDed64 {
     #[inline]
     fn bin_matrix_product_paritied(matrix: &[u64], value: u64) -> u64 {
         let mut result = 0u64;
@@ -56,7 +56,7 @@ impl Secded64 {
                 assert_ne!(x, y);
             }
         }
-        Secded64 {
+        SecDed64 {
             encodable_size: encodable_size as u8,
             m: m as u8,
             mask: { (0..=m).map(|x| 1u8 << x).sum::<u8>() },
@@ -99,7 +99,7 @@ impl Secded64 {
     }
 }
 
-impl SecDedCodec for Secded64 {
+impl SecDedCodec for SecDed64 {
     fn encodable_size(&self) -> usize {
         self.encodable_size as usize
     }
@@ -140,7 +140,7 @@ impl SecDedCodec for Secded64 {
 #[cfg(feature = "bench")]
 #[bench]
 fn encode(b: &mut test::Bencher) {
-    let secded = Secded64::new(57);
+    let secded = SecDed64::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
@@ -156,7 +156,7 @@ fn encode(b: &mut test::Bencher) {
 #[cfg(feature = "bench")]
 #[bench]
 fn decode(b: &mut test::Bencher) {
-    let secded = Secded64::new(57);
+    let secded = SecDed64::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
@@ -170,7 +170,7 @@ fn decode(b: &mut test::Bencher) {
 #[cfg(feature = "bench")]
 #[bench]
 fn decode_1err(b: &mut test::Bencher) {
-    let secded = Secded64::new(57);
+    let secded = SecDed64::new(57);
     let expected = [0, 0, 0, 0, 0, 5, 0, 0];
     let mut buffer = expected;
     secded.encode(&mut buffer);
@@ -206,7 +206,7 @@ fn decode_1err(b: &mut test::Bencher) {
 
 #[test]
 fn codec() {
-    let secded = Secded64::new(57);
+    let secded = SecDed64::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0, 0];
     let mut encode_buffer = expected;
     secded.encode(&mut encode_buffer);

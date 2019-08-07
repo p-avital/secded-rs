@@ -4,7 +4,7 @@ use crate::*;
 use crate::bitvec::Bitvec;
 use std::collections::{HashMap, VecDeque};
 
-pub struct SecdedDynamic {
+pub struct SecDedDynamic {
     encodable_size: usize,
     m: usize,
     max: Bitvec,
@@ -16,7 +16,7 @@ lazy_static::lazy_static! {
     static ref BITVEC_ONE: Bitvec = bitvec![1];
 }
 
-impl SecdedDynamic {
+impl SecDedDynamic {
     #[inline]
     fn bin_matrix_product_paritied(matrix: &[Bitvec], value: &Bitvec) -> Bitvec {
         let one: &Bitvec = &BITVEC_ONE;
@@ -85,7 +85,7 @@ impl SecdedDynamic {
             mask <<= 1;
             mask |= 1;
         }
-        SecdedDynamic {
+        SecDedDynamic {
             m,
             max,
             mask,
@@ -122,8 +122,8 @@ impl SecdedDynamic {
 
 #[test]
 fn bin_matrix() {
-    let dynamic = SecdedDynamic::new(57);
-    let fixed = Secded64::new(57);
+    let dynamic = SecDedDynamic::new(57);
+    let fixed = SecDed64::new(57);
     for (i, x) in dynamic.encode_matrix.iter().enumerate() {
         assert_eq!(fixed.encode_matrix[i], x.to_u64_be())
     }
@@ -140,7 +140,7 @@ fn copy_into(binvec: &Bitvec, buffer: &mut [u8]) {
     }
 }
 
-impl SecDedCodec for SecdedDynamic {
+impl SecDedCodec for SecDedDynamic {
     fn encodable_size(&self) -> usize {
         self.encodable_size
     }
@@ -185,7 +185,7 @@ impl SecDedCodec for SecdedDynamic {
 
 #[test]
 fn codec() {
-    let secded = SecdedDynamic::new(57);
+    let secded = SecDedDynamic::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0, 0];
     let mut encode_buffer = expected;
     secded.encode(&mut encode_buffer);
@@ -212,7 +212,7 @@ fn codec() {
 #[cfg(feature = "bench")]
 #[bench]
 fn encode(b: &mut test::Bencher) {
-    let secded = SecdedDynamic::new(57);
+    let secded = SecDedDynamic::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
@@ -228,7 +228,7 @@ fn encode(b: &mut test::Bencher) {
 #[cfg(feature = "bench")]
 #[bench]
 fn decode(b: &mut test::Bencher) {
-    let secded = SecdedDynamic::new(57);
+    let secded = SecDedDynamic::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0];
     let mut buffer = [0u8; 8];
     buffer[1..].clone_from_slice(&expected);
@@ -242,7 +242,7 @@ fn decode(b: &mut test::Bencher) {
 #[cfg(feature = "bench")]
 #[bench]
 fn decode_1err(b: &mut test::Bencher) {
-    let secded = SecdedDynamic::new(57);
+    let secded = SecDedDynamic::new(57);
     let expected = [0, 0, 0, 0, 5, 0, 0];
     let mut buffer = [0u8; 8];
     buffer[..7].clone_from_slice(&expected);

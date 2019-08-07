@@ -1,7 +1,7 @@
 use crate::bitwise::Bitwise;
 use crate::*;
 #[repr(C)]
-pub struct Secded128 {
+pub struct SecDed128 {
     encodable_size: u8,
     m: u8,
     mask: u8,
@@ -9,7 +9,7 @@ pub struct Secded128 {
     syndromes: [u16; 128],
 }
 
-impl Secded128 {
+impl SecDed128 {
     #[inline]
     fn bin_matrix_product_paritied(matrix: &[u128], value: u128) -> u128 {
         let mut result = 0;
@@ -56,7 +56,7 @@ impl Secded128 {
                 assert_ne!(x, y);
             }
         }
-        Secded128 {
+        SecDed128 {
             encodable_size: encodable_size as u8,
             m: m as u8,
             mask: { (0..=m).map(|x| 1u8 << x).sum::<u8>() },
@@ -99,7 +99,7 @@ impl Secded128 {
     }
 }
 
-impl SecDedCodec for Secded128 {
+impl SecDedCodec for SecDed128 {
     fn encodable_size(&self) -> usize {
         self.encodable_size as usize
     }
@@ -140,7 +140,7 @@ impl SecDedCodec for Secded128 {
 #[cfg(feature = "bench")]
 #[bench]
 fn encode(b: &mut test::Bencher) {
-    let secded = Secded128::new(57);
+    let secded = SecDed128::new(57);
     let mut buffer = [0u8; 16];
     buffer[13] = 5;
     b.iter(|| {
@@ -155,7 +155,7 @@ fn encode(b: &mut test::Bencher) {
 #[cfg(feature = "bench")]
 #[bench]
 fn decode(b: &mut test::Bencher) {
-    let secded = Secded128::new(57);
+    let secded = SecDed128::new(57);
     let mut buffer = [0u8; 16];
     buffer[13] = 5;
     secded.encode(&mut buffer);
@@ -168,7 +168,7 @@ fn decode(b: &mut test::Bencher) {
 #[cfg(feature = "bench")]
 #[bench]
 fn decode_1err(b: &mut test::Bencher) {
-    let secded = Secded128::new(57);
+    let secded = SecDed128::new(57);
     let mut buffer = [0u8; 16];
     buffer[13] = 5;
     secded.encode(&mut buffer);
@@ -191,7 +191,7 @@ fn decode_1err(b: &mut test::Bencher) {
 
 #[test]
 fn codec() {
-    let hamming = Secded128::new(120);
+    let hamming = SecDed128::new(120);
     //    assert_eq!(hamming.code_size(), 7);
     let mut test_value = [0; 16];
     test_value[12] = 5;

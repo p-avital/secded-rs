@@ -7,6 +7,7 @@ use std::collections::{HashMap, VecDeque};
 pub struct SecDedDynamic {
     encodable_size: usize,
     m: usize,
+    #[cfg(not(feature = "no-panics"))]
     max: Bitvec,
     mask: Bitvec,
     encode_matrix: Vec<Bitvec>,
@@ -87,6 +88,7 @@ impl SecDedDynamic {
         }
         SecDedDynamic {
             m,
+            #[cfg(not(feature = "no-panics"))]
             max,
             mask,
             encodable_size,

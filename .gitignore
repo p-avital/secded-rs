@@ -1,5 +1,7 @@
-/target
-**/*.rs.bk
-Cargo.lock
-.idea
-cmake-build-debug
+*
+!README.md
+!src/*
+!Cargo.toml
+!secded.h
+!example.c
+!CMakeLists.txt

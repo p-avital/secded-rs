@@ -455,7 +455,7 @@ fn and_u8() {
     for _ in 0..100000 {
         let (x, y): (u64, u8) = (rng.gen(), rng.gen_range(0, 64));
         let expected = x as u8 & y;
-        let mut x = Bitvec::from_u64_be(x);
+        let x = Bitvec::from_u64_be(x);
         let x = &x & y;
         match expected == x {
             true => {}
@@ -475,7 +475,7 @@ fn and() {
     for _ in 0..100000 {
         let (x, y): (u64, u64) = (rng.gen(), rng.gen_range(0, 64));
         let expected = x & y;
-        let mut x = Bitvec::from_u64_be(x);
+        let x = Bitvec::from_u64_be(x);
         let x = &x & &Bitvec::from_u64_be(y);
         match expected == x.to_u64_be() {
             true => {}

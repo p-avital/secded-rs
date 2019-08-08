@@ -14,8 +14,10 @@ impl SecDed128 {
     fn bin_matrix_product_paritied(matrix: &[u128], value: u128) -> u128 {
         let mut result = 0;
         for x in matrix.iter() {
-            result ^= (*x & value).parity();
-            result <<= 1;
+            if *x != 0 {
+                result ^= (*x & value).parity();
+                result <<= 1;
+            }
         }
         result |= result.parity();
         result
@@ -25,10 +27,7 @@ impl SecDed128 {
         if encodable_size > 120 {
             panic!("This implementation is based on u64, and can thus only encode payloads of at most 57 bits");
         }
-        let mut m = 1;
-        while 2_usize.pow(m as u32) - m < encodable_size as usize {
-            m += 1;
-        }
+        let m = hamming_size(encodable_size);
         let mut encode_matrix = [0; 7];
         for i in 1..(2_u128.pow(m as u32) + 1) {
             if i.count() < 2 {
@@ -39,7 +38,7 @@ impl SecDed128 {
                 encode_matrix[k] |= i >> (m - 1 - k) & 1;
             }
         }
-        for i in 0..7 {
+        for i in 0..m {
             encode_matrix[i] = encode_matrix[i] << (m + 1);
             if i <= m {
                 encode_matrix[i] |= 1 << (m - i);

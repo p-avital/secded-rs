@@ -35,10 +35,7 @@ impl SecDedDynamic {
     }
 
     pub fn new(encodable_size: usize) -> Self {
-        let mut m = 1;
-        while (1 << m) - m < encodable_size as usize {
-            m += 1;
-        }
+        let m = hamming_size(encodable_size);
         let mut encode_matrix = vec![Bitvec(vec![].into()); m];
         let mut i = Bitvec(vec![1].into());
         let max = i.clone() << m;

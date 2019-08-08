@@ -17,6 +17,14 @@ pub use secded_128::SecDed128;
 #[cfg(feature = "dyn")]
 pub mod secded_dynamic;
 
+fn hamming_size(encodable_size: usize) -> usize {
+    let mut m = 1;
+    while (1 << m) - m - 1 < encodable_size as usize {
+        m += 1;
+    }
+    m
+}
+
 /// Your main interaction point with this crate, it allows you to encode and decode your data slices.
 pub trait SecDedCodec {
     /// Returns the number of bits that this SecDedCodec can encode.

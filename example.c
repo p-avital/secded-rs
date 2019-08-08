@@ -5,12 +5,12 @@
 
 int test_u64() {
     printf("TESTING U64: \r\n");
-    uint8_t expected[8] = {0, 0, 0, 0, 5, 0, 0, 0};
+    const uint8_t expected[8] = {0, 0, 0, 0, 5, 0, 0, 0};
     uint8_t buffer[8];
     memcpy(buffer, expected, 8);
-    SECDED_64 secded = SECDED_64_new(57);
+    const SECDED_64 secded = SECDED_64_new(57);
     SECDED_64_encode(&secded, buffer);
-    buffer[7] ^= 1 << 1;
+    buffer[7] ^= 1u << 1u;
     if (!SECDED_64_decode(&secded, buffer)) {
         printf("TESTING U64 -- FAILED: DECODE FAILED\n");
         return 1;
@@ -27,12 +27,15 @@ int test_u64() {
 
 int test_u128() {
     printf("TESTING U128: \r\n");
-    uint8_t expected[16] = {0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0};
+    const uint8_t expected[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0};
     uint8_t buffer[16];
     memcpy(buffer, expected, 16);
-    SECDED_128 secded = SECDED_128_new(120);
+    const SECDED_128 secded = SECDED_128_new(57);
     SECDED_128_encode(&secded, buffer);
-    buffer[7] ^= 1 << 1;
+    {  // Borrow `buffer`'s active part for test modification
+        uint8_t *active_buffer = &buffer[8];
+        active_buffer[7] ^= 1u << 1u;
+    }
     if (!SECDED_128_decode(&secded, buffer)) {
         printf("TESTING U128 -- FAILED: DECODE FAILED\n");
         return 2;
@@ -49,14 +52,13 @@ int test_u128() {
 
 #ifdef SECDED_FEATURES_DYN
 int test_dyn() {
-    int result = 0;
-    uint8_t expected[8] = {0, 0, 0, 0, 5, 0, 0, 0};
+    const uint8_t expected[8] = {0, 0, 0, 0, 5, 0, 0, 0};
     uint8_t buffer[8];
     memcpy(buffer, expected, 8);
     printf("TESTING DYN:\r\n");
-    SECDED_DYN *secded = SECDED_DYN_new(57);
+    const SECDED_DYN *secded = SECDED_DYN_new(57);
     SECDED_DYN_encode(secded, buffer, 8);
-    buffer[7] ^= 1 << 1;
+    buffer[0] ^= 128u;
     if (!SECDED_DYN_decode(secded, buffer, 8)) {
         printf("TESTING DYN -- FAILED: DECODE FAILED\n");
         return 4;
@@ -64,12 +66,12 @@ int test_dyn() {
     for (int i = 0; i < 8; i++) {
         if (expected[i] != buffer[i]) {
             printf("TESTING DYN -- FAILED: DECODE WRONG: [%d]: %d != %d\n", i, expected[i], buffer[i]);
-            result = 4;
+            return 4;
         }
     }
-    // SECDED_DYN_free(secded);
+    SECDED_DYN_free(secded);
     printf("TESTING DYN -- OK\r\n");
-    return result;
+    return 0;
 }
 #endif
 

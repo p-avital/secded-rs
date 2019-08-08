@@ -25,21 +25,18 @@ impl SecDed64 {
         if encodable_size > 57 {
             panic!("This implementation is based on u64, and can thus only encode payloads of at most 57 bits");
         }
-        let mut m = 1;
-        while 2_usize.pow(m as u32) - m < encodable_size as usize {
-            m += 1;
-        }
+        let m = hamming_size(encodable_size);
         let mut encode_matrix = [0; 6];
         for i in 1..=(2_u64.pow(m as u32)) {
             if i.count() < 2 {
                 continue;
             }
-            for (k, x) in encode_matrix.iter_mut().enumerate() {
+            for (k, x) in encode_matrix.iter_mut().enumerate().take(m) {
                 *x <<= 1;
                 *x |= i >> (m - 1 - k) & 1;
             }
         }
-        for (i, x) in encode_matrix.iter_mut().enumerate() {
+        for (i, x) in encode_matrix.iter_mut().enumerate().take(m) {
             *x <<= m + 1;
             if i <= m {
                 *x |= 1 << (m - i);

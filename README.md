@@ -40,14 +40,15 @@ test secded_dynamic::encode      ... bench:         411 ns/iter (+/- 27)
 Running Valgrind on the example should report 0 leaks without the `USE_DYN` feature flag.  
 When using the `USE_DYN` feature flag, you should see that 8 bytes are still reachable: this is normal and due to the usage of `lazy_static` to provide a constant to the implementation.
 
-Failing to call `SECDED_DYN_free(...)` (instead of `free`) on a pointer provided by `SECDED_DYN_new(...)` will cause big memory leaks, as even with an encoding size as small as `57`, the indirect loss is of `9608` bytes, on top of the `160` bytes occupied by the `SecDedDynamic` structure itself. So if your language supports 
+Failing to call `SECDED_DYN_free(...)` (instead of `free`) on a pointer provided by `SECDED_DYN_new(...)` will cause big memory leaks, as even with an encoding size as small as `57`, the indirect loss is of `9608` bytes, on top of the `160` bytes occupied by the `SecDedDynamic` structure itself. The indirect loss seems to be linear with the requested encodable size.  
+So if your language supports custom destructors, I highly suggest wrapping the provided pointer in a reference counter with a destructor that will call `SECDED_DYN_free(...)` 
 
 ## How It Works
 The correction matrix `C` is built by concatenating the column vector (most significant bit at the top) representations of each encodable integer with a bit count higher than one. This way of constructing `C` is deterministic and guarantees cross-implementation compatibility.
 
 Typically, encoding would use `encoded = data * G`, where `data` is a column vector of `N` bits, and `G` is the `N` sized Identity Matrix on top of `C`.
 
-Instead, this implementation relies on data being `N` bits and `code_size` `0`s, so that the same computation `r = data * H + P` can be used to compute both the correction code at encoding and the syndrome at decoding. `H` is then `[C I 0]` where `I` is the `code_size` sized Identity Matrix, `0` is an appropriately sized null column vector, and `P` is a vector of `0`s, with the last bit set to the parity of `data * H`.
+Instead, this implementation relies on data being `N` bits followed by `code_size` bits set to `0`, so that the same computation `r = data * H + P` can be used to compute both the correction code at encoding and the syndrome at decoding. `H` is then `[C I 0]` where `I` is the `code_size` sized Identity Matrix, `0` is an appropriately sized null column vector, and `P` is a vector of `0`s, with the last bit set to the parity of `data * H`.
 
 At encoding, the last `code_size` bits of `data` are replaced with `r`.  
 At decoding, if an error is detected (non-null, known syndrome), it is corrected in-place, and the last `code_size` bits are reset to `0` to avoid misinterpretations and allow for immediate re-encoding even after mutating the data.

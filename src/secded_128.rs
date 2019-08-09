@@ -33,26 +33,29 @@ impl SecDed128 {
         }
         let m = hamming_size(encodable_size);
         let mut encode_matrix = [0; 7];
-        for i in 1..(2_u128.pow(m as u32) + 1) {
+        for i in 1..=(2_u128.pow(m as u32)) {
             if i.count() < 2 {
                 continue;
             }
-            for k in 0..(m as usize) {
-                encode_matrix[k] <<= 1;
-                encode_matrix[k] |= i >> (m - 1 - k) & 1;
+            for (k, x) in encode_matrix.iter_mut().enumerate().take(m) {
+                *x <<= 1;
+                *x |= i >> (m - 1 - k) & 1;
             }
         }
-        for i in 0..m {
-            encode_matrix[i] = encode_matrix[i] << (m + 1);
+        for (i, x) in encode_matrix.iter_mut().enumerate().take(m) {
+            *x <<= m + 1;
             if i <= m {
-                encode_matrix[i] |= 1 << (m - i);
+                *x |= 1 << (m - i);
             }
         }
         let mut syndromes = [0; 128];
-        for error_bit in 0..=(encodable_size + m) {
+        for (error_bit, syndrome) in syndromes
+            .iter_mut()
+            .enumerate()
+            .take(encodable_size + m + 1)
+        {
             let error: u128 = 1u128 << error_bit;
-            syndromes[error_bit] =
-                Self::bin_matrix_product_paritied(&encode_matrix[0..m], error) as u16;
+            *syndrome = Self::bin_matrix_product_paritied(&encode_matrix[0..m], error) as u16;
         }
         for (i, x) in syndromes[..=(encodable_size + m)].iter().enumerate() {
             for y in syndromes[i + 1..=(encodable_size + m)].iter() {
@@ -75,6 +78,7 @@ impl SecDed128 {
     #[cfg(not(feature = "no-panics"))]
     #[inline]
     fn encode_assertions(&self, encodable: u128) {
+        #[allow(clippy::cast_lossless)]
         match encodable & self.mask as u128 {
             0 => {}
             _ => {
@@ -87,6 +91,7 @@ impl SecDed128 {
                 );
             }
         }
+        #[allow(clippy::cast_lossless)]
         match 1u128.overflowing_shl((self.encodable_size + self.m + 1) as u32) {
             (value, false) if encodable > value => {
                 let mut buffer: [u8; 16] = unsafe { core::mem::uninitialized() };

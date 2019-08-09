@@ -36,7 +36,7 @@ lint:rustfmt:
   image: "guangie88/rustfmt-clippy"
   # allow_failure: true
   script:
-    - cargo fmt -- --write-mode=diff
+    - cargo fmt -- --check
 
 lint:clippy:
   image: "guangie88/rustfmt-clippy"

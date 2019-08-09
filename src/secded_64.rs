@@ -47,10 +47,13 @@ impl SecDed64 {
             }
         }
         let mut syndromes = [0; 64];
-        for error_bit in 0..=(encodable_size + m) {
+        for (error_bit, syndrome) in syndromes
+            .iter_mut()
+            .enumerate()
+            .take(encodable_size + m + 1)
+        {
             let error: u64 = 1u64 << error_bit;
-            syndromes[error_bit] =
-                Self::bin_matrix_product_paritied(&encode_matrix[0..m], error) as u16;
+            *syndrome = Self::bin_matrix_product_paritied(&encode_matrix[0..m], error) as u16;
         }
         for (i, x) in syndromes[..=(encodable_size + m)].iter().enumerate() {
             for y in syndromes[i + 1..=(encodable_size + m)].iter() {
@@ -73,6 +76,7 @@ impl SecDed64 {
     #[cfg(not(feature = "no-panics"))]
     #[inline]
     fn encode_assertions(&self, encodable: u64) {
+        #[allow(clippy::cast_lossless)]
         match encodable & (self.mask as u64) {
             0 => {}
             _ => {
@@ -85,6 +89,7 @@ impl SecDed64 {
                 );
             }
         }
+        #[allow(clippy::cast_lossless)]
         match 1u64.overflowing_shl((self.encodable_size + self.m + 1) as u32) {
             (value, false) if encodable > value => {
                 let mut buffer: [u8; 8] = unsafe { core::mem::uninitialized() };

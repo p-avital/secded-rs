@@ -6,6 +6,7 @@ edition = "2018"
 keywords = ["secded", "hamming", "error-correction", "network"]
 license = "MPL-2.0"
 repository = "https://gitlab.com/p-avital/secded-rs"
+description = "Single Error Correction, Double Error Detection Codes for Everyone"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

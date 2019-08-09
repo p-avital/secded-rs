@@ -1,13 +1,13 @@
 [package]
 name = "secded"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Pierre Avital <pierre.avital@me.com>"]
 edition = "2018"
 keywords = ["secded", "hamming", "error-correction", "network"]
 license = "MPL-2.0"
 repository = "https://gitlab.com/p-avital/secded-rs"
 description = "Single Error Correction, Double Error Detection Codes for Everyone"
-
+readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

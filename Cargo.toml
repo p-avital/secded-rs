@@ -1,6 +1,6 @@
 [package]
 name = "secded"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Pierre Avital <pierre.avital@me.com>"]
 edition = "2018"
 keywords = ["secded", "hamming", "error-correction", "network"]
@@ -35,4 +35,4 @@ name = "secded"
 crate-type = ["staticlib", "dylib"]
 
 [badges]
-gitlab = { repository = "https://gitlab.com/p-avital/secded-rs", branch = "master" }
+gitlab = { repository = "p-avital/secded-rs", branch = "master" }

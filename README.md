@@ -52,3 +52,8 @@ Instead, this implementation relies on data being `N` bits followed by `code_siz
 
 At encoding, the last `code_size` bits of `data` are replaced with `r`.  
 At decoding, if an error is detected (non-null, known syndrome), it is corrected in-place, and the last `code_size` bits are reset to `0` to avoid misinterpretations and allow for immediate re-encoding even after mutating the data.
+
+## Licensing
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at https://mozilla.org/MPL/2.0/.

@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
 use crate::bitwise::Bitwise;
 use crate::*;
 #[repr(C)]
@@ -72,7 +76,7 @@ impl SecDed64 {
         match encodable & (self.mask as u64) {
             0 => {}
             _ => {
-                let mut buffer: [u8; 8] = unsafe { std::mem::uninitialized() };
+                let mut buffer: [u8; 8] = unsafe { core::mem::uninitialized() };
                 byteorder::BigEndian::write_u64(&mut buffer[..], encodable);
                 panic!(
                     "{:?} overlaps with the code-correction slot, which is the right-most {} bits ",
@@ -83,7 +87,7 @@ impl SecDed64 {
         }
         match 1u64.overflowing_shl((self.encodable_size + self.m + 1) as u32) {
             (value, false) if encodable > value => {
-                let mut buffer: [u8; 8] = unsafe { std::mem::uninitialized() };
+                let mut buffer: [u8; 8] = unsafe { core::mem::uninitialized() };
                 byteorder::BigEndian::write_u64(&mut buffer[..], encodable);
                 panic!(
                     "{:?} is too big to be encoded on {} bits",
